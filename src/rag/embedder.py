@@ -1,18 +1,23 @@
 from langchain_huggingface import HuggingFaceEmbeddings
 import torch
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-if device == "cuda":
-    print(f"   GPU: {torch.cuda.get_device_name(0)}")
+class Embedder:
+    device: str = "cpu"
+    embedding_model_name: str = "fitlemon/bge-m3-ru-ostap"
 
-#EMBEDDING_MODEL = "BAAI/bge-m3" #квантифицированная
-EMBEDDING_MODEL = "fitlemon/bge-m3-ru-ostap" #зафайнтюненная для русского языка BAAI/bge-m3
+    def __init__(self, device="cpu", model='fitlemon/bge-m3-ru-ostap'):
+        self.device = device
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        if device == "cuda":
+            print(f"   GPU: {torch.cuda.get_device_name(0)}")
 
-embeddings = HuggingFaceEmbeddings(
-    model_name=EMBEDDING_MODEL,
-    model_kwargs={'device': device},
-    encode_kwargs={'normalize_embeddings': True} # Важно для косинусного расстояния!
-)
+        self.embedding_model_name = model
 
-def get_embedding(text: str) -> list[float]:
-    return embeddings.embed_query(text=text)
+        self.embedding_model = HuggingFaceEmbeddings(
+            model_name=self.embedding_model_name,
+            model_kwargs={'device': self.device},
+            encode_kwargs={'normalize_embeddings': True}
+        )
+
+    def get_embedding(self, text: str) -> list[float]:
+        return self.embedding_model.embed_query(text=text)

@@ -1,8 +1,10 @@
 from fastapi import FastAPI
-from rag.embedder import get_embedding
+from rag.embedder import Embedder
 from sentence_transformers import util
 
 app = FastAPI()
+
+embedder = Embedder()
 
 @app.post("/generate_embeddings")
 def generate_embeddings():
@@ -14,9 +16,9 @@ def root():
 
 @app.get("/test")
 def test_endpoint():
-    embedding1= get_embedding("Пес ходила на лужайке")
-    embedding2 = get_embedding("Собака бегала на газоне")
-    embedding3 = get_embedding("Василий бухал на лужайке")
+    embedding1= embedder.get_embedding("Пес ходила на лужайке")
+    embedding2 = embedder.get_embedding("Собака бегала на газоне")
+    embedding3 = embedder.get_embedding("Василий бухал на лужайке")
     cosim1 = util.cos_sim(embedding1, embedding2)
     cosim2 = util.cos_sim(embedding1, embedding3)
     print(cosim1)
