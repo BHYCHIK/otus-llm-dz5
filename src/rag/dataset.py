@@ -40,12 +40,11 @@ class ArxivDataset:
     def _load_directory(self, subdir):
         print("loading directory {}".format(subdir))
         dir_metadata = SubsetMetadata(subdir)
-        print(dict(dir_metadata.get_all_metadata()))
 
         loader = PyPDFDirectoryLoader(subdir, recursive=True)
         docs_of_subdir = loader.load()
 
-        for d in self._docs:
+        for d in docs_of_subdir:
             doc_metadata = dir_metadata.get_metadata_of_doc(self._get_doc_id(d.metadata.get("source")))
             d.metadata['loaded_title'] = doc_metadata['title']
             d.metadata['loaded_link'] = doc_metadata['link']
