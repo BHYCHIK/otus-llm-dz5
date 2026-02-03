@@ -1,13 +1,20 @@
 from fastapi import FastAPI
 from rag.embedder import Embedder
 from sentence_transformers import util
+from langchain_community.document_loaders import PyPDFDirectoryLoader
+from rag.dataset import ArxivDataset
 
 app = FastAPI()
 
-embedder = Embedder()
+embedder = Embedder(model='BAAI/bge-m3')
 
-@app.post("/generate_embeddings")
+#TODO make POST
+@app.get("/generate_embeddings")
 def generate_embeddings():
+    print("generate embeddings")
+
+    arxiv_dataset = ArxivDataset('../data').load().split()
+
     return {}
 
 @app.get("/")
