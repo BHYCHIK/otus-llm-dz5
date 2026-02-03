@@ -1,5 +1,20 @@
+import json
+import os
+import shutil
+
 import requests
 from bs4 import BeautifulSoup
+
+def download_by_meta(meta, category):
+    os.makedirs('data/' + category, exist_ok=True)
+    with open('data/' + category + '/meta.json', 'w') as f:
+        json.dump(meta, f, ensure_ascii=False, indent=4)
+
+    for m in meta:
+        pdf_response = requests.get(m['link'], stream=True)
+        pdf_response.raise_for_status()
+        with open('data/' + category + '/' + m['id'] + '.pdf', 'wb') as f:
+            shutil.copyfileobj(pdf_response.raw, f)
 
 def get_category_page(link, category):
     resp = requests.get(link)
@@ -17,9 +32,11 @@ def get_category_page(link, category):
     i = 0
     for pdf_link in pdf_links:
         link = 'https://arxiv.org' + pdf_link["href"]
+        metadata[i]["id"] = link.split("/")[-1]
         metadata[i]["link"] = link
+        metadata[i]["category"] = category
         i += 1
-    print(metadata)
+    download_by_meta(metadata, category)
 
 def main():
     links_to_parse = []
