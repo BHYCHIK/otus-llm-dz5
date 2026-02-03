@@ -1,21 +1,13 @@
 from fastapi import FastAPI
 from rag.embedder import Embedder
 from sentence_transformers import util
-from langchain_community.document_loaders import PyPDFDirectoryLoader
 from rag.dataset import ArxivDataset
+from rag.vector_store import ChromaStore
 
 app = FastAPI()
 
 embedder = Embedder(model='BAAI/bge-m3')
-
-#TODO make POST
-@app.get("/generate_embeddings")
-def generate_embeddings():
-    print("generate embeddings")
-
-    arxiv_dataset = ArxivDataset('../data').load().split()
-
-    return {}
+store = ChromaStore(embedder=embedder.get_model())
 
 @app.get("/")
 def root():

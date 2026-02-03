@@ -49,7 +49,7 @@ class ArxivDataset:
             d.metadata['loaded_title'] = doc_metadata['title']
             d.metadata['loaded_link'] = doc_metadata['link']
             d.metadata['loaded_category'] = doc_metadata['category']
-            d.metadata['loaded_authors'] = doc_metadata['all_authors']
+            d.metadata['loaded_authors'] = ";".join(doc_metadata['all_authors'])
 
         self._docs.extend(docs_of_subdir)
         print("Now loaded {} documents".format(len(self._docs)))
@@ -60,7 +60,7 @@ class ArxivDataset:
         dirs = os.listdir(self._path)
         for dir in dirs:
             self._load_directory(self._path + os.sep + dir)
-            break #TODO: delete
+            #break #TODO: delete
         print("loaded {} documents".format(len(self._docs)))
         return self
 
