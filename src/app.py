@@ -102,7 +102,6 @@ def naive_search_good(query:str, limit:int=5, cycles=10):
     end = time.time()
     resp = []
     for i, (document, score) in enumerate(splits):
-        print(document, score)
         resp.append({'document': document, 'score': score})
     return {'documents': resp, 'timing': end - start}
 
