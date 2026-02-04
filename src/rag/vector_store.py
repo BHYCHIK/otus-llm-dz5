@@ -18,7 +18,6 @@ class VectorStore:
     def find_splits(self, query: str, limit: int=100):
         return self._vector_store.similarity_search_with_score(query, limit)
 
-#TODO add configuration of HSNW and make it as name to dir
 class ChromaStore(VectorStore):
     def __init__(self, embedder, space='cosine', construction_ef=100, M=16, search_ef=10):
         super().__init__(embedder=embedder, space='cosine', construction_ef=100, M=16, search_ef=10)
