@@ -11,6 +11,6 @@ def get_basic_rag_prompt():
             Your answers must be short.
             If you cannot find answer in context, answer "no information".
             """),
-            HumanMessagePromptTemplate.from_template("""<query>{query}</query><context>{context}</context>"""),
+            HumanMessagePromptTemplate.from_template("""<query>{query}</query><context>{context}</context>If you cannot find answer in context, answer exactly <output>'no information'</output> without any additional text"""),
         ]
     )

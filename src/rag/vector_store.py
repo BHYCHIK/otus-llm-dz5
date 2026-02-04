@@ -25,6 +25,7 @@ class ChromaStore(VectorStore):
         self._vector_store.add_documents(splits)
 
     def find_splits(self, query: str, limit: int=100):
+        print(self._vector_store)
         return self._vector_store.similarity_search_with_score(query, limit)
 
     def get_retriever(self, limit: int=100, fetch_limit: int=100, search_type: str='similarity'):
