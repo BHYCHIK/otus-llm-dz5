@@ -26,3 +26,15 @@ class ChromaStore(VectorStore):
 
     def find_splits(self, query: str, limit: int=100):
         return self._vector_store.similarity_search_with_score(query, limit)
+
+    def get_retriever(self, limit: int=100, fetch_limit: int=100, search_type: str='similarity'):
+        search_kwargs = {
+            'k': limit,
+        }
+        if search_type == 'mmr':
+            search_kwargs['fetch_k'] = fetch_limit
+
+        return self._vector_store.as_retriever(
+            search_type=search_type,
+            search_kwargs=search_kwargs,
+        )
