@@ -1,13 +1,68 @@
+import time
+import os
+import dotenv
+
 from fastapi import FastAPI
+from langchain_core.messages import HumanMessage
+from langchain_core.output_parsers import StrOutputParser
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.globals import set_debug
+
+set_debug(True)
+
+
 from rag.embedder import Embedder
-from sentence_transformers import util
 from rag.vector_store import ChromaStore
+
+from prompts.prompts import get_basic_rag_prompt
+
+dotenv.load_dotenv('../.env')
+app = FastAPI()
+
+llm = ChatOpenAI(
+    api_key=os.environ['API_KEY'],
+    base_url=os.environ['API_BASE_URL'],
+    temperature=0.0,
+    model='qwen-3-32b'
+)
+
+embedder = Embedder(model='BAAI/bge-m3')
+store_chroma_bad= ChromaStore(embedder=embedder.get_model(), construction_ef=4, M=2, search_ef=1)
+store_chroma_good = ChromaStore(embedder=embedder.get_model(), construction_ef=100, M=16, search_ef=10)
 
 app = FastAPI()
 
-embedder = Embedder(model='BAAI/bge-m3')
-#store = ChromaStore(embedder=embedder.get_model(), construction_ef=4, M=2, search_ef=1)
-store = ChromaStore(embedder=embedder.get_model(), construction_ef=100, M=16, search_ef=10)
+def simple_llm(query:str):
+    return (ChatPromptTemplate.from_messages([HumanMessage(query)]) | llm | StrOutputParser()).invoke({})
+
+def simple_rag(query: str):
+    splits = store_chroma_good.find_splits(query, 15)
+    context = ''.join([f"<document>{doc.page_content}</document>" for (doc, score) in splits])
+    print(context)
+    return (get_basic_rag_prompt() | llm | StrOutputParser()).invoke({'context': context, 'query': query})
+
+def naive_search_good(query:str, limit:int=5, cycles=10):
+    splits = []
+    start = time.time()
+    for _ in range(cycles):
+        splits = store_chroma_good.find_splits(query, limit)
+    end = time.time()
+    resp = []
+    for i, (document, score) in enumerate(splits):
+        resp.append({'document': document, 'score': score})
+    return {'documents': resp, 'timing': end - start}
+
+def naive_search_bad(query:str, limit:int=5, cycles=10):
+    splits = []
+    start = time.time()
+    for _ in range(cycles):
+        splits =  store_chroma_bad.find_splits(query, limit)
+    end = time.time()
+    resp = []
+    for i, (document, score) in enumerate(splits):
+        resp.append({'document': document, 'score': score})
+    return {'documents': resp, 'timing': end - start}
 
 @app.get("/")
 def root():
@@ -15,7 +70,11 @@ def root():
 
 @app.get("/test")
 def test_endpoint():
-    splits = store.find_splits("Which parameters help predict oil consumption?", 5)
-    for split in splits:
-        print(split.page_content)
-    return {"status": "ok"}
+    query = 'Which parameters help predict oil consumption?'
+    return {'status': 'ok',
+            'query': query,
+            'chroma_naive_good': naive_search_good(query),
+            'chroma_naive_bad': naive_search_bad(query),
+            #'simple_llm_answer': simple_llm(query),
+            'simple_rag_answer': simple_rag(query),
+            }
