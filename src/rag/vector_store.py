@@ -23,3 +23,6 @@ class ChromaStore(VectorStore):
 
     def store_splits(self, splits):
         self._vector_store.add_documents(splits)
+
+    def find_splits(self, query: str, limit: int=100):
+        return self._vector_store.similarity_search(query, limit)
