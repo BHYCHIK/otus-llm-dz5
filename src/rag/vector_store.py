@@ -4,6 +4,8 @@ from qdrant_client import QdrantClient, models
 
 import os
 
+from qdrant_client.http.models import HnswConfigDiff, QuantizationConfigDiff
+
 
 class VectorStore:
     def __init__(self, embedder, space='cosine', construction_ef=100, M=16, search_ef=10):
@@ -85,3 +87,21 @@ class QdrantStore(VectorStore):
             collection_name=self._collection_name,
             size=vector_dim
         )
+
+        self._client.update_collection(
+            collection_name=self._collection_name,
+            hnsw_config=HnswConfigDiff(
+                m=self._M,
+                ef_construct=self._construction_ef,
+            )
+        )
+
+        self._client.update_collection(
+            collection_name=self._collection_name,
+            quantization_config=QuantizationConfigDiff(
+                type='int8',
+                quantile=0.99,
+                always_ram=True,
+            )
+        )
+
