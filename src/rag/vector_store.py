@@ -4,7 +4,7 @@ from qdrant_client import QdrantClient, models
 
 import os
 
-from qdrant_client.http.models import HnswConfigDiff, QuantizationConfigDiff
+from qdrant_client.models import HnswConfigDiff, VectorParams
 
 
 class VectorStore:
@@ -51,41 +51,49 @@ class ChromaStore(VectorStore):
                                     })
 
 class QdrantStore(VectorStore):
-    def __init__(self, embedder, space='cosine', construction_ef=100, M=16, search_ef=10):
-
-        if space == 'cosine':
-            local_space = models.Distance.COSINE
-        elif space == 'euclid':
-            local_space = models.Distance.EUCLID
-        elif space == 'dot':
-            local_space = models.Distance.DOT
-        elif space == 'manhattan':
-            local_space = models.Distance.MANHATTAN
+    def _get_distance(self):
+        if self._space == 'cosine':
+            return models.Distance.COSINE
+        elif self._space == 'euclid':
+            return models.Distance.EUCLID
+        elif self._space == 'dot':
+            return models.Distance.DOT
+        elif self._space == 'manhattan':
+            return models.Distance.MANHATTAN
         else:
             raise Exception("Space must be one of 'cosine', 'euclid', 'dot', 'manhattan'")
+
+    def __init__(self, embedder, space='cosine', construction_ef=100, M=16, search_ef=10, need_setup=False):
 
         super().__init__(embedder=embedder, space=space, construction_ef=construction_ef, M=M, search_ef=search_ef)
 
         self._client = QdrantClient(url=os.environ['QDRANT_URL'])
         self._collection_name = f'arxiv_{space}_{construction_ef}_{M}_{search_ef}'
+
+        if need_setup:
+            self.setup_collection()
+
         self._vector_store = QdrantVectorStore(
             collection_name=self._collection_name,
-            distance=local_space,
+            distance=self._get_distance(),
             client=self._client,
-            embedding=self._embedder.get_model()
+            embedding=self.get_embedder()
         )
 
     def setup_collection(self):
         if self._client.collection_exists(self._collection_name):
             self._client.delete_collection(self._collection_name)
 
-        vector_dim = self.get_embedder().get_model()._client.get_sentence_embedding_dimension()
+        vector_dim = self.get_embedder()._client.get_sentence_embedding_dimension()
 
         print(f"Prepare collection {self._collection_name} with size {vector_dim}")
 
         self._client.create_collection(
             collection_name=self._collection_name,
-            size=vector_dim
+            vectors_config=VectorParams(
+                size=vector_dim,
+                distance=self._get_distance()
+            )
         )
 
         self._client.update_collection(
@@ -98,10 +106,12 @@ class QdrantStore(VectorStore):
 
         self._client.update_collection(
             collection_name=self._collection_name,
-            quantization_config=QuantizationConfigDiff(
-                type='int8',
-                quantile=0.99,
-                always_ram=True,
+            quantization_config=models.ScalarQuantization(
+                scalar=models.ScalarQuantizationConfig(
+                    type=models.ScalarType.INT8,
+                    quantile=0.99,
+                    always_ram=True,
+                )
             )
         )
 

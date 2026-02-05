@@ -1,11 +1,17 @@
+import dotenv
+
 from rag.embedder import Embedder
 from rag.dataset import ArxivDataset
 from rag.vector_store import QdrantStore
 import time
+import dotenv
+
+print('loading dotenv')
+dotenv.load_dotenv('../.env', verbose=True)
 
 embedder = Embedder(model='BAAI/bge-m3')
-#store = QdrantStore(embedder=embedder.get_model(), construction_ef=4, M=2, search_ef=1)
-store = QdrantStore(embedder=embedder.get_model(), construction_ef=100, M=16, search_ef=10)
+#store = QdrantStore(embedder=embedder.get_model(), construction_ef=4, M=2, search_ef=1, need_setup=True)
+store = QdrantStore(embedder=embedder.get_model(), construction_ef=100, M=16, search_ef=10, need_setup=True)
 
 ITER_SIZE = 50
 
