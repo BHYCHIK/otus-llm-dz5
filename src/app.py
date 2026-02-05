@@ -1,24 +1,33 @@
 import time
 import os
+import uuid
+
 import dotenv
 
 from fastapi import FastAPI
 from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables import RunnablePassthrough, RunnableConfig
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.globals import set_debug
 
-set_debug(False)
+from langfuse import get_client, propagate_attributes
 
 from rag.embedder import Embedder
 from rag.vector_store import ChromaStore
 
 from prompts.prompts import get_basic_rag_prompt
 
+from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
+
+
+set_debug(False)
+
 dotenv.load_dotenv('../.env')
 app = FastAPI()
+
+langfuse_client = get_client()
 
 llm = ChatOpenAI(
     api_key=os.environ['API_KEY'],
@@ -39,36 +48,36 @@ def _get_bad_vector_store():
 
 app = FastAPI()
 
-def simple_llm(query:str):
-    return (ChatPromptTemplate.from_messages([HumanMessage(query)]) | llm | StrOutputParser()).invoke({})
+def simple_llm(query:str, llm_cfg):
+    return (ChatPromptTemplate.from_messages([HumanMessage(query)]) | llm | StrOutputParser()).invoke({}, config=llm_cfg)
 
-def simple_rag(query: str, vector_storage=None):
+def simple_rag(query: str, llm_cfg, vector_storage=None):
     if vector_storage is None:
         vector_storage = _get_vector_store()
     splits = vector_storage.find_splits(query, 15)
     context = ''.join([f"<document>{doc.page_content}</document>" for (doc, score) in splits])
-    return (get_basic_rag_prompt() | llm | StrOutputParser()).invoke({'context': context, 'query': query})
+    return (get_basic_rag_prompt() | llm | StrOutputParser()).invoke({'context': context, 'query': query}, config=llm_cfg)
 
-def hallucinations_check(query:str):
-    return simple_rag(query, _get_bad_vector_store())
+def hallucinations_check(query:str, llm_cfg):
+    return simple_rag(query, llm_cfg, _get_bad_vector_store())
 
-def simple_rag_mmr(query: str):
+def simple_rag_mmr(query: str, llm_cfg):
     retriever = _get_vector_store().get_retriever(search_type='mmr', limit=15, fetch_limit=70)
     splits = retriever.invoke(query)
     context = ''.join([f"<document>{doc.page_content}</document>" for doc in splits])
-    return (get_basic_rag_prompt() | llm | StrOutputParser()).invoke({'context': context, 'query': query})
-
-def _get_hyde_output(query:str):
-    return (ChatPromptTemplate.from_messages([HumanMessage(query)])  | llm | StrOutputParser()).invoke({})
-
+    return (get_basic_rag_prompt() | llm | StrOutputParser()).invoke({'context': context, 'query': query}, config=llm_cfg)
 
 def _format_context(splits):
     context = ''.join([f"<document>{doc.page_content}</document>" for doc in splits])
     return context
 
-def rag_with_hyde(query: str):
+def rag_with_hyde(query: str, llm_cfg):
     retriever = _get_vector_store().get_retriever(limit=15)
 
+    def _get_hyde_output(query: str):
+        return (ChatPromptTemplate.from_messages([HumanMessage(query)]) | llm | StrOutputParser()).invoke({},
+                                                                                                          config=llm_cfg)
+
     chain = (
             {
                 "query": RunnablePassthrough(),
@@ -78,11 +87,15 @@ def rag_with_hyde(query: str):
             | llm
             | StrOutputParser()
     )
-    return chain.invoke(query)
+    return chain.invoke(query, config=llm_cfg)
 
-def rag_with_hyde_mmr(query: str):
+def rag_with_hyde_mmr(query: str, llm_cfg):
     retriever = _get_vector_store().get_retriever(search_type='mmr', limit=15, fetch_limit=70)
 
+    def _get_hyde_output(query: str):
+        return (ChatPromptTemplate.from_messages([HumanMessage(query)]) | llm | StrOutputParser()).invoke({},
+                                                                                                          config=llm_cfg)
+
     chain = (
             {
                 "query": RunnablePassthrough(),
@@ -92,7 +105,7 @@ def rag_with_hyde_mmr(query: str):
             | llm
             | StrOutputParser()
     )
-    return chain.invoke(query)
+    return chain.invoke(query, config=llm_cfg)
 
 def naive_search_good(query:str, limit:int=5, cycles=10):
     splits = []
@@ -122,15 +135,22 @@ def root():
 
 @app.get("/test")
 def test_endpoint():
+    session_id = uuid.uuid4().hex
+    llm_cfg: RunnableConfig = {
+        'configurable': {'thread_id': session_id},
+        'callbacks': [LangfuseCallbackHandler()],
+    }
     query = 'Which parameters help predict oil consumption?'
-    return {'status': 'ok',
-            'query': query,
-            'chroma_naive_good': naive_search_good(query),
-            'chroma_naive_bad': naive_search_bad(query),
-            'simple_llm_answer': simple_llm(query),
-            'simple_rag_answer': simple_rag(query),
-            'simple_rag_mmr_answer': simple_rag_mmr(query),
-            'rag_with_hyde_answer': rag_with_hyde(query),
-            'rag_with_hyde_mmr_answer': rag_with_hyde_mmr(query),
-            'hallucinations_check': hallucinations_check(query),
-            }
+    with langfuse_client.start_as_current_observation(as_type='span', name='langchain_call'):
+        with propagate_attributes(session_id=session_id):
+            return {'status': 'ok',
+                    'query': query,
+                    'chroma_naive_good': naive_search_good(query),
+                    'chroma_naive_bad': naive_search_bad(query),
+                    'simple_llm_answer': simple_llm(query, llm_cfg),
+                    'simple_rag_answer': simple_rag(query, llm_cfg),
+                    'simple_rag_mmr_answer': simple_rag_mmr(query, llm_cfg),
+                    'rag_with_hyde_answer': rag_with_hyde(query, llm_cfg),
+                    'rag_with_hyde_mmr_answer': rag_with_hyde_mmr(query, llm_cfg),
+                    'hallucinations_check': hallucinations_check(query, llm_cfg),
+                    }

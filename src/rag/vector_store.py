@@ -1,5 +1,6 @@
 from langchain_chroma import Chroma
-from langchain_qdrant import Qdrant
+from langchain_qdrant import QdrantVectorStore
+from qdrant_client import qdrant_client, models
 
 class VectorStore:
     def __init__(self, embedder, space='cosine', construction_ef=100, M=16, search_ef=10):
@@ -8,6 +9,7 @@ class VectorStore:
         self._construction_ef = construction_ef
         self._M = M
         self._search_ef = search_ef
+        self._vector_store = None
 
     def get_embedder(self):
         return self._embedder
@@ -20,7 +22,7 @@ class VectorStore:
 
 class ChromaStore(VectorStore):
     def __init__(self, embedder, space='cosine', construction_ef=100, M=16, search_ef=10):
-        super().__init__(embedder=embedder, space='cosine', construction_ef=100, M=16, search_ef=10)
+        super().__init__(embedder=embedder, space=space, construction_ef=construction_ef, M=M, search_ef=search_ef)
         self._vector_store = Chroma(collection_name='arxiv',
                                     persist_directory=f'../chroma_{space}_{construction_ef}_{M}_{search_ef}/',
                                     embedding_function=self.get_embedder(),
@@ -42,3 +44,30 @@ class ChromaStore(VectorStore):
             search_type=search_type,
             search_kwargs=search_kwargs,
         )
+
+class QdrantStore(VectorStore):
+    def __init__(self, embedder, space='cosine', construction_ef=100, M=16, search_ef=10):
+
+        if space == 'cosine':
+            local_space = models.Distance.COSINE
+        elif space == 'euclid':
+            local_space = models.Distance.EUCLID
+        elif space == 'dot':
+            local_space = models.Distance.DOT
+        elif space == 'manhattan':
+            local_space = models.Distance.MANHATTAN
+        else:
+            raise Exception("Space must be one of 'cosine', 'euclid', 'dot', 'manhattan'")
+
+        super().__init__(embedder=embedder, space=space, construction_ef=construction_ef, M=M, search_ef=search_ef)
+
+        self._client = qdrant_client.QdrantClient()
+        self._collection_name = f'arxiv_{space}_{construction_ef}_{M}_{search_ef}'
+        self._vector_store = QdrantVectorStore(
+            collection_name=self._collection_name,
+            distance=local_space,
+            client=self._client,
+        )
+
+    def setup_collection(self):
+        return
