@@ -96,6 +96,13 @@ class QdrantStore(VectorStore):
             )
         )
 
+        self._client.create_payload_index(
+            collection_name=self._collection_name,
+            field_name='category',
+            field_schema=models.PayloadSchemaType.KEYWORD,
+            wait=True
+        )
+
         self._client.update_collection(
             collection_name=self._collection_name,
             hnsw_config=HnswConfigDiff(
