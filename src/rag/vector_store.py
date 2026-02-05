@@ -1,6 +1,9 @@
 from langchain_chroma import Chroma
 from langchain_qdrant import QdrantVectorStore
-from qdrant_client import qdrant_client, models
+from qdrant_client import QdrantClient, models
+
+import os
+
 
 class VectorStore:
     def __init__(self, embedder, space='cosine', construction_ef=100, M=16, search_ef=10):
@@ -20,6 +23,18 @@ class VectorStore:
     def find_splits(self, query: str, limit: int=100):
         return self._vector_store.similarity_search_with_score(query, limit)
 
+    def get_retriever(self, limit: int=100, fetch_limit: int=100, search_type: str='similarity'):
+        search_kwargs = {
+            'k': limit,
+        }
+        if search_type == 'mmr':
+            search_kwargs['fetch_k'] = fetch_limit
+
+        return self._vector_store.as_retriever(
+            search_type=search_type,
+            search_kwargs=search_kwargs,
+        )
+
 class ChromaStore(VectorStore):
     def __init__(self, embedder, space='cosine', construction_ef=100, M=16, search_ef=10):
         super().__init__(embedder=embedder, space=space, construction_ef=construction_ef, M=M, search_ef=search_ef)
@@ -32,18 +47,6 @@ class ChromaStore(VectorStore):
                                         'hnsw:M': self._M,
                                         'hnsw:search_ef': self._search_ef
                                     })
-
-    def get_retriever(self, limit: int=100, fetch_limit: int=100, search_type: str='similarity'):
-        search_kwargs = {
-            'k': limit,
-        }
-        if search_type == 'mmr':
-            search_kwargs['fetch_k'] = fetch_limit
-
-        return self._vector_store.as_retriever(
-            search_type=search_type,
-            search_kwargs=search_kwargs,
-        )
 
 class QdrantStore(VectorStore):
     def __init__(self, embedder, space='cosine', construction_ef=100, M=16, search_ef=10):
@@ -61,13 +64,24 @@ class QdrantStore(VectorStore):
 
         super().__init__(embedder=embedder, space=space, construction_ef=construction_ef, M=M, search_ef=search_ef)
 
-        self._client = qdrant_client.QdrantClient()
+        self._client = QdrantClient(url=os.environ['QDRANT_URL'])
         self._collection_name = f'arxiv_{space}_{construction_ef}_{M}_{search_ef}'
         self._vector_store = QdrantVectorStore(
             collection_name=self._collection_name,
             distance=local_space,
             client=self._client,
+            embedding=self._embedder.get_model()
         )
 
     def setup_collection(self):
-        return
+        if self._client.collection_exists(self._collection_name):
+            self._client.delete_collection(self._collection_name)
+
+        vector_dim = self.get_embedder().get_model()._client.get_sentence_embedding_dimension()
+
+        print(f"Prepare collection {self._collection_name} with size {vector_dim}")
+
+        self._client.create_collection(
+            collection_name=self._collection_name,
+            size=vector_dim
+        )
