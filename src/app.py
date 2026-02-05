@@ -15,7 +15,7 @@ from langchain_core.globals import set_debug
 from langfuse import get_client, propagate_attributes
 
 from rag.embedder import Embedder
-from rag.vector_store import ChromaStore
+from rag.vector_store import ChromaStore, QdrantStore
 
 from prompts.prompts import get_basic_rag_prompt
 
@@ -25,7 +25,6 @@ from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 set_debug(False)
 
 dotenv.load_dotenv('../.env')
-app = FastAPI()
 
 langfuse_client = get_client()
 
@@ -39,6 +38,8 @@ llm = ChatOpenAI(
 embedder = Embedder(model='BAAI/bge-m3')
 store_chroma_bad = ChromaStore(embedder=embedder.get_model(), construction_ef=4, M=2, search_ef=1)
 store_chroma_good = ChromaStore(embedder=embedder.get_model(), construction_ef=100, M=16, search_ef=10)
+store_qdrant_bad  = QdrantStore(embedder=embedder.get_model(), construction_ef=4, M=2, search_ef=1, need_setup=False)
+store_qdrant_good = QdrantStore(embedder=embedder.get_model(), construction_ef=100, M=16, search_ef=10, need_setup=False)
 
 def _get_vector_store():
     return store_chroma_good
@@ -107,27 +108,29 @@ def rag_with_hyde_mmr(query: str, llm_cfg):
     )
     return chain.invoke(query, config=llm_cfg)
 
-def naive_search_good(query:str, limit:int=5, cycles=10):
+def _naive_search(vector_store, query:str, limit:int=5, cycles=10):
     splits = []
     start = time.time()
     for _ in range(cycles):
-        splits = _get_vector_store().find_splits(query, limit)
+        splits = vector_store.find_splits(query, limit)
     end = time.time()
     resp = []
     for i, (document, score) in enumerate(splits):
         resp.append({'document': document, 'score': score})
     return {'documents': resp, 'timing': end - start}
 
-def naive_search_bad(query:str, limit:int=5, cycles=10):
-    splits = []
-    start = time.time()
-    for _ in range(cycles):
-        splits =  _get_bad_vector_store().find_splits(query, limit)
-    end = time.time()
-    resp = []
-    for i, (document, score) in enumerate(splits):
-        resp.append({'document': document, 'score': score})
-    return {'documents': resp, 'timing': end - start}
+def naive_chroma_search_good(query:str, limit:int=5, cycles=10):
+    return _naive_search(store_chroma_good, query, limit, cycles)
+
+def naive_chroma_search_bad(query:str, limit:int=5, cycles=10):
+    return _naive_search(store_chroma_bad, query, limit, cycles)
+
+def naive_qdrant_search_good(query:str, limit:int=5, cycles=10):
+    return _naive_search(store_qdrant_good, query, limit, cycles)
+
+def naive_qdrant_search_bad(query:str, limit:int=5, cycles=10):
+    return _naive_search(store_qdrant_bad, query, limit, cycles)
+
 
 @app.get("/")
 def root():
@@ -145,8 +148,10 @@ def test_endpoint():
         with propagate_attributes(session_id=session_id):
             return {'status': 'ok',
                     'query': query,
-                    'chroma_naive_good': naive_search_good(query),
-                    'chroma_naive_bad': naive_search_bad(query),
+                    'chroma_naive_good': naive_chroma_search_good(query),
+                    'chroma_naive_bad': naive_chroma_search_bad(query),
+                    'qdrant_naive_good': naive_qdrant_search_good(query),
+                    'qdrant_naive_bad': naive_qdrant_search_bad(query),
                     'simple_llm_answer': simple_llm(query, llm_cfg),
                     'simple_rag_answer': simple_rag(query, llm_cfg),
                     'simple_rag_mmr_answer': simple_rag_mmr(query, llm_cfg),
