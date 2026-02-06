@@ -6,7 +6,7 @@ import dotenv
 
 from fastapi import FastAPI
 from langchain_core.messages import HumanMessage
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.output_parsers import StrOutputParser, PydanticOutputParser
 from langchain_core.runnables import RunnablePassthrough, RunnableConfig
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -17,10 +17,12 @@ from langfuse import get_client, propagate_attributes
 from rag.embedder import Embedder
 from rag.vector_store import ChromaStore, QdrantStore
 
-from prompts.prompts import get_basic_rag_prompt
+from prompts.prompts import get_basic_rag_prompt, get_query_cat_prompt
 
 from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 
+from pydantic import BaseModel, Field
+from enum import Enum
 
 set_debug(False)
 
@@ -131,6 +133,46 @@ def naive_qdrant_search_good(query:str, limit:int=5, cycles=10):
 def naive_qdrant_search_bad(query:str, limit:int=5, cycles=10):
     return _naive_search(store_qdrant_bad, query, limit, cycles)
 
+class Category(str, Enum):
+    astro_ph = 'astro-ph'
+    physics = 'physics'
+    cond_mat = 'cond-mat'
+    high_energy = 'high-energy'
+    gr_qc = 'gr-qc'
+    hep_ex = 'hep-ex'
+    hep_ph = 'hep-ph'
+    hep_lat = 'hep-lat'
+    mat_ph = 'math-ph'
+    econ = 'econ'
+    eess = 'eess'
+    stat = 'stat'
+    q_fin = 'q-fin'
+    math = 'math'
+    quant_ph = 'quant-ph'
+    nlin = 'nlin'
+    nucl_ex = 'nucl-ex'
+    nucl_th = 'nucl-th'
+    cs = 'cs'
+
+class SearchCategories(BaseModel):
+    categories: list[Category] = Field(description='Categories of query, which fit the most')
+
+def rag_with_hybrid_search(query: str, llm_cfg):
+    parser = PydanticOutputParser(pydantic_object=SearchCategories)
+
+    categories = (get_query_cat_prompt() | llm | parser).invoke({
+            'query': query,
+            'format_instruction': parser.get_format_instructions()
+        },
+        config=llm_cfg)
+
+    categories = [str(c).split('.')[1] for c in categories.categories]
+
+    print(categories)
+    split = _get_bad_vector_store().find_splits(query, limit=5, categories=categories)
+
+    return split
+
 
 @app.get("/")
 def root():
@@ -144,6 +186,7 @@ def test_endpoint():
         'callbacks': [LangfuseCallbackHandler()],
     }
     query = 'Which parameters help predict oil consumption?'
+    #query = 'Which star is the closest to Earth?'
     with langfuse_client.start_as_current_observation(as_type='span', name='langchain_call'):
         with propagate_attributes(session_id=session_id):
             return {'status': 'ok',
@@ -152,10 +195,11 @@ def test_endpoint():
                     'chroma_naive_bad': naive_chroma_search_bad(query),
                     'qdrant_naive_good': naive_qdrant_search_good(query),
                     'qdrant_naive_bad': naive_qdrant_search_bad(query),
-                    'simple_llm_answer': simple_llm(query, llm_cfg),
-                    'simple_rag_answer': simple_rag(query, llm_cfg),
-                    'simple_rag_mmr_answer': simple_rag_mmr(query, llm_cfg),
-                    'rag_with_hyde_answer': rag_with_hyde(query, llm_cfg),
-                    'rag_with_hyde_mmr_answer': rag_with_hyde_mmr(query, llm_cfg),
-                    'hallucinations_check': hallucinations_check(query, llm_cfg),
+                    #'simple_llm_answer': simple_llm(query, llm_cfg),
+                    #'simple_rag_answer': simple_rag(query, llm_cfg),
+                    #'simple_rag_mmr_answer': simple_rag_mmr(query, llm_cfg),
+                    #'rag_with_hyde_answer': rag_with_hyde(query, llm_cfg),
+                    #'rag_with_hyde_mmr_answer': rag_with_hyde_mmr(query, llm_cfg),
+                    'rag_with_hybrid_search_answer_with_bad_index': rag_with_hybrid_search(query, llm_cfg),
+                    #'hallucinations_check': hallucinations_check(query, llm_cfg),
                     }

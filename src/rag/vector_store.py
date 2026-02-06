@@ -22,7 +22,7 @@ class VectorStore:
     def store_splits(self, splits):
         self._vector_store.add_documents(splits)
 
-    def find_splits(self, query: str, limit: int=100):
+    def find_splits(self, query: str, limit: int=100, categories: list[str] = None):
         return self._vector_store.similarity_search_with_score(query, limit)
 
     def get_retriever(self, limit: int=100, fetch_limit: int=100, search_type: str='similarity'):
@@ -49,6 +49,13 @@ class ChromaStore(VectorStore):
                                         'hnsw:M': self._M,
                                         'hnsw:search_ef': self._search_ef
                                     })
+
+    def find_splits(self, query: str, limit: int=100, categories: list[str] = None):
+        if categories is None:
+            return super().find_splits(query=query, limit=limit)
+
+        return self._vector_store.similarity_search_with_score(query=query, k=limit, filter={'metadata.loaded_category': {'$in': categories}})
+
 
 class QdrantStore(VectorStore):
     def _get_distance(self):
@@ -80,6 +87,29 @@ class QdrantStore(VectorStore):
             embedding=self.get_embedder()
         )
 
+    def find_splits(self, query: str, limit: int=100, categories: list[str] = None):
+        if categories is None:
+            return super().find_splits(query=query, limit=limit)
+
+        return self._vector_store.similarity_search_with_score(query=query, k=limit,
+                                                               filter={
+                                                                   'must': [
+                                                                       {
+                                                                           'key': 'metadata.loaded_category',
+                                                                           'match': {'any': categories},
+                                                                       },
+                                                                   ],
+                                                                }
+                                                               )
+
+    def setup_index(self):
+        self._client.create_payload_index(
+            collection_name=self._collection_name,
+            field_name='metadata.category',
+            field_schema=models.PayloadSchemaType.KEYWORD,
+            wait=True
+        )
+
     def setup_collection(self):
         if self._client.collection_exists(self._collection_name):
             self._client.delete_collection(self._collection_name)
@@ -96,12 +126,7 @@ class QdrantStore(VectorStore):
             )
         )
 
-        self._client.create_payload_index(
-            collection_name=self._collection_name,
-            field_name='category',
-            field_schema=models.PayloadSchemaType.KEYWORD,
-            wait=True
-        )
+        self.setup_index()
 
         self._client.update_collection(
             collection_name=self._collection_name,
