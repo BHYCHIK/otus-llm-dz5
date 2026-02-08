@@ -1,6 +1,7 @@
 from langchain_chroma import Chroma
 from langchain_qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient, models
+from qdrant_client.http.models import Filter, FieldCondition, MatchAny
 
 import os
 
@@ -54,7 +55,9 @@ class ChromaStore(VectorStore):
         if categories is None:
             return super().find_splits(query=query, limit=limit)
 
-        return self._vector_store.similarity_search_with_score(query=query, k=limit, filter={'metadata.loaded_category': {'$in': categories}})
+        #categories = ['hep-ph']
+        return self._vector_store.similarity_search_with_score(query=query, k=limit, filter={'loaded_category': {'$in': categories}})
+        return self._vector_store.similarity_search_with_score(query=query, k=limit, filter={'loaded_category': {'$in': categories}})
 
 
 class QdrantStore(VectorStore):
@@ -91,16 +94,26 @@ class QdrantStore(VectorStore):
         if categories is None:
             return super().find_splits(query=query, limit=limit)
 
-        return self._vector_store.similarity_search_with_score(query=query, k=limit,
-                                                               filter={
-                                                                   'must': [
-                                                                       {
-                                                                           'key': 'metadata.loaded_category',
-                                                                           'match': {'any': categories},
-                                                                       },
-                                                                   ],
-                                                                }
-                                                               )
+        q_filter = Filter(
+            must=[
+                FieldCondition(
+                    key='metadata.loaded_category',
+                    match=MatchAny(any=categories)
+                )
+            ]
+        )
+
+        retriever = self._vector_store.as_retriever(
+            search_kwargs={
+                'k': limit,
+                'filter': q_filter,
+                'with_payload': True
+            }
+        )
+
+        docs = retriever.invoke(query)
+
+        return docs
 
     def setup_index(self):
         self._client.create_payload_index(

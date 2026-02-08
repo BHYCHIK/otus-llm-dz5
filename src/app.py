@@ -44,10 +44,10 @@ store_qdrant_bad  = QdrantStore(embedder=embedder.get_model(), construction_ef=4
 store_qdrant_good = QdrantStore(embedder=embedder.get_model(), construction_ef=100, M=16, search_ef=10, need_setup=False)
 
 def _get_vector_store():
-    return store_chroma_good
+    return store_qdrant_good
 
 def _get_bad_vector_store():
-    return store_chroma_bad
+    return store_qdrant_bad
 
 app = FastAPI()
 
