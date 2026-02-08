@@ -121,16 +121,16 @@ def _naive_search(vector_store, query:str, limit:int=5, cycles=10):
         resp.append({'document': document, 'score': score})
     return {'documents': resp, 'timing': end - start}
 
-def naive_chroma_search_good(query:str, limit:int=5, cycles=10):
+def naive_chroma_search_good(query:str, limit:int=5, cycles=100):
     return _naive_search(store_chroma_good, query, limit, cycles)
 
-def naive_chroma_search_bad(query:str, limit:int=5, cycles=10):
+def naive_chroma_search_bad(query:str, limit:int=5, cycles=100):
     return _naive_search(store_chroma_bad, query, limit, cycles)
 
-def naive_qdrant_search_good(query:str, limit:int=5, cycles=10):
+def naive_qdrant_search_good(query:str, limit:int=5, cycles=100):
     return _naive_search(store_qdrant_good, query, limit, cycles)
 
-def naive_qdrant_search_bad(query:str, limit:int=5, cycles=10):
+def naive_qdrant_search_bad(query:str, limit:int=5, cycles=100):
     return _naive_search(store_qdrant_bad, query, limit, cycles)
 
 class Category(str, Enum):
