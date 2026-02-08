@@ -169,7 +169,6 @@ def rag_with_filters_search(query: str, llm_cfg):
     categories = [str(c).split('.')[1] for c in categories.categories]
 
     splits = _get_bad_vector_store().find_splits(query, limit=15, categories=categories)
-    print(splits)
     context = ''.join([f"<document>{doc.page_content}</document>" for (doc, score) in splits])
     return (get_basic_rag_prompt() | llm | StrOutputParser()).invoke({'context': context, 'query': query}, config=llm_cfg)
 
