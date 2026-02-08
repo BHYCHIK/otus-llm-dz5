@@ -157,7 +157,7 @@ class Category(str, Enum):
 class SearchCategories(BaseModel):
     categories: list[Category] = Field(description='Categories of query, which fit the most')
 
-def rag_with_hybrid_search(query: str, llm_cfg):
+def rag_with_filters_search(query: str, llm_cfg):
     parser = PydanticOutputParser(pydantic_object=SearchCategories)
 
     categories = (get_query_cat_prompt() | llm | parser).invoke({
@@ -168,10 +168,10 @@ def rag_with_hybrid_search(query: str, llm_cfg):
 
     categories = [str(c).split('.')[1] for c in categories.categories]
 
-    print(categories)
-    split = _get_bad_vector_store().find_splits(query, limit=5, categories=categories)
-
-    return split
+    splits = _get_bad_vector_store().find_splits(query, limit=15, categories=categories)
+    print(splits)
+    context = ''.join([f"<document>{doc.page_content}</document>" for (doc, score) in splits])
+    return (get_basic_rag_prompt() | llm | StrOutputParser()).invoke({'context': context, 'query': query}, config=llm_cfg)
 
 
 @app.get("/")
@@ -195,11 +195,11 @@ def test_endpoint():
                     'chroma_naive_bad': naive_chroma_search_bad(query),
                     'qdrant_naive_good': naive_qdrant_search_good(query),
                     'qdrant_naive_bad': naive_qdrant_search_bad(query),
-                    #'simple_llm_answer': simple_llm(query, llm_cfg),
-                    #'simple_rag_answer': simple_rag(query, llm_cfg),
-                    #'simple_rag_mmr_answer': simple_rag_mmr(query, llm_cfg),
-                    #'rag_with_hyde_answer': rag_with_hyde(query, llm_cfg),
-                    #'rag_with_hyde_mmr_answer': rag_with_hyde_mmr(query, llm_cfg),
-                    'rag_with_hybrid_search_answer_with_bad_index': rag_with_hybrid_search(query, llm_cfg),
-                    #'hallucinations_check': hallucinations_check(query, llm_cfg),
+                    'simple_llm_answer': simple_llm(query, llm_cfg),
+                    'simple_rag_answer': simple_rag(query, llm_cfg),
+                    'simple_rag_mmr_answer': simple_rag_mmr(query, llm_cfg),
+                    'rag_with_hyde_answer': rag_with_hyde(query, llm_cfg),
+                    'rag_with_hyde_mmr_answer': rag_with_hyde_mmr(query, llm_cfg),
+                    'rag_with_filter_search_answer_with_bad_index': rag_with_filters_search(query, llm_cfg),
+                    'hallucinations_check': hallucinations_check(query, llm_cfg),
                     }

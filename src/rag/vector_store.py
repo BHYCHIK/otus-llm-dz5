@@ -55,9 +55,11 @@ class ChromaStore(VectorStore):
         if categories is None:
             return super().find_splits(query=query, limit=limit)
 
-        #categories = ['hep-ph']
-        return self._vector_store.similarity_search_with_score(query=query, k=limit, filter={'loaded_category': {'$in': categories}})
-        return self._vector_store.similarity_search_with_score(query=query, k=limit, filter={'loaded_category': {'$in': categories}})
+        return self._vector_store.similarity_search_with_score(
+            query=query,
+            k=limit,
+            filter= {"loaded_category": {"$in": categories}}
+        )
 
 
 class QdrantStore(VectorStore):
@@ -113,7 +115,7 @@ class QdrantStore(VectorStore):
 
         docs = retriever.invoke(query)
 
-        return docs
+        return [(doc, None) for doc in docs] #RETURN None score
 
     def setup_index(self):
         self._client.create_payload_index(
